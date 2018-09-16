@@ -14,7 +14,8 @@ class Waypoints(DemoPolicy):
         self.waypoints = waypoints
         self.currentWaypoint = 0
 
-    def goToWaypoint(self, grip_pos, waypoint):
+    @staticmethod
+    def go_to_waypoint(grip_pos, waypoint):
         return (
             np.concatenate((waypoint - grip_pos, [0.4])),
             np.linalg.norm(grip_pos - waypoint) < 0.05,
@@ -22,7 +23,7 @@ class Waypoints(DemoPolicy):
 
     def _choose_action(self, state):
         grip_pos = state[0:3]
-        action, done = self.goToWaypoint(
+        action, done = self.go_to_waypoint(
             grip_pos, self.waypoints[min(self.currentWaypoint,
                                          len(self.waypoints) - 1)])
         if done:
@@ -48,11 +49,7 @@ class Pusher(DemoPolicy):
             behind_obj = object_pos + object_rel / \
                 np.linalg.norm(object_rel) * 0.06
             behind_obj[2] = 0.03
-            waypoints = []
-            waypoints.append(np.concatenate([behind_obj[:2], [0.2]]))
-            waypoints.append(behind_obj)
-
-            waypoints.append(goal_pos)
+            waypoints = [np.concatenate([behind_obj[:2], [0.2]]), behind_obj, goal_pos]
 
             self.policy = Waypoints(waypoints)
         action = self.policy._choose_action(state)

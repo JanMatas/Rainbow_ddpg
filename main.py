@@ -93,7 +93,7 @@ def parse_args():
     parser.add_argument(
         '--env-id',
         type=str,
-        default='MicoEnv-pusher_fix-pixels-positive-ik-acton-v1')
+        default='Pusher-v1')
     parser.add_argument('--eval-env-id', type=str, default='')
     boolean_flag(parser, 'render-eval', default=True)
     boolean_flag(parser, 'render-demo', default=True)

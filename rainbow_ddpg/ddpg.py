@@ -13,6 +13,7 @@ import sys
 
 tmp = os.path.dirname(sys.modules['__main__'].__file__) + "/tmp"
 
+
 def normalize(x, stats):
     if stats is None:
         return x
@@ -94,21 +95,21 @@ class DDPG(object):
 
         # Inputs.
         self.obs0 = tf.placeholder(
-            tf.float32, shape=(None, ) + observation_shape, name='obs0')
+            tf.float32, shape=(None,) + observation_shape, name='obs0')
         self.obs1 = tf.placeholder(
-            tf.float32, shape=(None, ) + observation_shape, name='obs1')
+            tf.float32, shape=(None,) + observation_shape, name='obs1')
 
         self.state0 = tf.placeholder(
-            tf.float32, shape=(None, ) + state_shape, name='state0')
+            tf.float32, shape=(None,) + state_shape, name='state0')
         self.state1 = tf.placeholder(
-            tf.float32, shape=(None, ) + state_shape, name='state1')
+            tf.float32, shape=(None,) + state_shape, name='state1')
 
         self.terminals1 = tf.placeholder(
             tf.float32, shape=(None, 1), name='terminals1')
         self.rewards = tf.placeholder(
             tf.float32, shape=(None, 1), name='rewards')
         self.actions = tf.placeholder(
-            tf.float32, shape=(None, ) + action_shape, name='actions')
+            tf.float32, shape=(None,) + action_shape, name='actions')
         self.critic_target = tf.placeholder(
             tf.float32, shape=(None, 1), name='critic_target')
 
@@ -116,18 +117,21 @@ class DDPG(object):
             tf.float32, shape=(None, 1), name='nstep_reached')
         self.nstep_critic_target = tf.placeholder(
             tf.float32, shape=(None, 1), name='nstep_critic_target')
+
+        #  Memory debug variables - memory and resident set size. Used
+        #  for tensorboard plotting.
         self.memory_size = tf.placeholder(
             tf.float32, shape=None, name='memory_size')
         self.rss = tf.placeholder(tf.float32, shape=None, name='rss')
 
         self.aux0 = tf.placeholder(
-            tf.float32, shape=(None, ) + aux_shape, name='aux0')
+            tf.float32, shape=(None,) + aux_shape, name='aux0')
         self.aux1 = tf.placeholder(
-            tf.float32, shape=(None, ) + aux_shape, name='aux1')
+            tf.float32, shape=(None,) + aux_shape, name='aux1')
 
         self.pretraining_tf = tf.placeholder(
             tf.float32, shape=(None, 1),
-            name='pretraining_tf')  # whether we use pre training or not
+            name='pretraining_tf')
 
         self.aux_shape = aux_shape
         self.gamma = gamma
@@ -165,7 +169,6 @@ class DDPG(object):
         self.ep = 0
         self.policy_and_target_update_period = policy_and_target_update_period
 
-        # Observation normalization.
         if self.normalize_observations:
             with tf.variable_scope('obs_rms'):
                 self.obs_rms = RunningMeanStd(shape=observation_shape)
@@ -183,7 +186,6 @@ class DDPG(object):
                 self.aux_rms = RunningMeanStd(shape=aux_shape)
         else:
             self.aux_rms = None
-
         with tf.name_scope('obs_preprocess'):
             self.normalized_obs0 = tf.clip_by_value(
                 normalize(self.obs0, self.obs_rms), self.observation_range[0],
@@ -198,7 +200,6 @@ class DDPG(object):
             self.normalized_state1 = tf.clip_by_value(
                 normalize(self.state1, self.state_rms), self.state_range[0],
                 self.state_range[1])
-
         with tf.name_scope('aux_preprocess'):
             self.normalized_aux0 = tf.clip_by_value(
                 normalize(self.aux0, self.aux_rms), self.aux_range[0],
@@ -207,7 +208,6 @@ class DDPG(object):
                 normalize(self.aux1, self.aux_rms), self.aux_range[0],
                 self.aux_range[1])
 
-        # Create target networks.
         target_actor = copy(actor)
         target_actor.name = 'target_actor'
         self.target_actor = target_actor
@@ -224,7 +224,9 @@ class DDPG(object):
             self.target_policy_noise_clip,
         )
 
+        # Initialize single/twin critics.
         self.num_critics = num_critics
+        assert (num_critics == 1 or num_critics == 2)
         self.critics = [None] * num_critics
         self.target_critics = [None] * num_critics
         self.critic_tfs = [None] * num_critics
@@ -255,14 +257,12 @@ class DDPG(object):
             Q_obs1s[i] = self.target_critics[i](self.normalized_state1,
                                                 next_actions + noise,
                                                 self.normalized_aux1)
-
         if num_critics == 2:
             minQ = tf.minimum(Q_obs1s[0], Q_obs1s[1])
         else:
             minQ = Q_obs1s[0]
-
         self.target_Q = self.rewards + \
-            (1. - self.terminals1) * tf.pow(gamma, self.nstep_steps) * minQ
+                        (1. - self.terminals1) * tf.pow(gamma, self.nstep_steps) * minQ
         self.importance_weights = tf.placeholder(
             tf.float32, shape=(None, 1), name='importance_weights')
         self.setup_actor_optimizer()
@@ -290,19 +290,17 @@ class DDPG(object):
     def setup_actor_optimizer(self):
         logger.info('setting up actor optimizer')
         with tf.name_scope('actor_optimizer'):
-
             self.action_diffs = tf.reduce_mean(
                 tf.square(self.actions - self.actor_tf), 1)
-            demo_better_than_critic = self.critic_tfs[
-                0] < self.critic_with_actor_tfs[0]
-            demo_better_than_critic = self.pretraining_tf * \
-                tf.cast(demo_better_than_critic, tf.float32)
+            demo_better_than_actor = self.critic_tfs[
+                                         0] < self.critic_with_actor_tfs[0]
+            demo_better_than_actor = self.pretraining_tf * \
+                                     tf.cast(demo_better_than_actor, tf.float32)
             self.bc_loss = (
-                tf.reduce_sum(demo_better_than_critic * self.action_diffs) *
-                self.lambda_pretrain /
-                (tf.reduce_sum(self.pretraining_tf) + 1e-6))
+                    tf.reduce_sum(demo_better_than_actor * self.action_diffs) *
+                    self.lambda_pretrain /
+                    (tf.reduce_sum(self.pretraining_tf) + 1e-6))
             self.original_actor_loss = - tf.reduce_mean(self.critic_with_actor_tfs[0])
-
             self.obj_conf_loss = tf.reduce_mean(
                 tf.square(self.obj_conf -
                           self.state0[:, 8:11])) * self.lambda_obj_conf_predict
@@ -312,11 +310,10 @@ class DDPG(object):
             self.target_loss = tf.reduce_mean(
                 tf.square(self.target -
                           self.state0[:, 3:6])) * self.lambda_target_predict
-
             self.actor_loss = self.original_actor_loss + self.bc_loss + \
-                self.obj_conf_loss + self.gripper_loss + self.target_loss
+                              self.obj_conf_loss + self.gripper_loss + self.target_loss
             self.number_of_demos_better = tf.reduce_sum(
-                demo_better_than_critic)
+                demo_better_than_actor)
             actor_shapes = [
                 var.get_shape().as_list() for var in self.actor.trainable_vars
             ]
@@ -338,13 +335,10 @@ class DDPG(object):
         with tf.name_scope('critic_optimizer' + str(i)):
             critic_target_tf = tf.clip_by_value(
                 self.critic_target, self.return_range[0], self.return_range[1])
-
             nstep_critic_target_tf = tf.clip_by_value(self.nstep_critic_target,
                                                       self.return_range[0],
                                                       self.return_range[1])
-
             td_error = tf.square(self.critic_tfs[i] - critic_target_tf)
-
             self.step_1_td_losses[i] = tf.reduce_mean(
                 self.importance_weights * td_error) * self.lambda_1step
 
@@ -356,7 +350,7 @@ class DDPG(object):
 
             self.td_errors[i] = td_error + nstep_td_error
             self.critic_losses[i] = self.step_1_td_losses[i] + \
-                self.n_step_td_losses[i]
+                                    self.n_step_td_losses[i]
 
             if self.critic_l2_reg > 0.:
                 critic_reg_vars = [
@@ -489,18 +483,15 @@ class DDPG(object):
             self.stats_names = names
 
     def pi(self, obs, aux, state0, apply_noise=True, compute_Q=True):
-
         actor_tf = self.actor_tf
         feed_dict = {self.obs0: [obs], self.aux0: [aux], self.state0: [state0]}
         if compute_Q:
-
             action, q, obj_conf, gripper, target = self.sess.run(
                 [
                     actor_tf, self.critic_with_actor_tfs[0], self.obj_conf,
                     self.gripper, self.target
                 ],
                 feed_dict=feed_dict)
-
         else:
             action, obj_conf, gripper, target = self.sess.run(
                 [actor_tf, self.obj_conf, self.gripper, self.target],
@@ -511,9 +502,7 @@ class DDPG(object):
             noise = self.action_noise()
             assert noise.shape == action.shape
             action += noise
-
         action = np.clip(action, self.action_range[0], self.action_range[1])
-
         return action, q, obj_conf, gripper, target
 
     def store_transition(self,
@@ -546,7 +535,6 @@ class DDPG(object):
             self.aux_rms.update(np.array([aux0]))
 
     def train(self, iteration, pretrain=False):
-        # Get a batch.
         batch, n_step_batch, percentage = self.memory.sample_rollout(
             batch_size=self.batch_size,
             nsteps=self.nsteps,
@@ -599,7 +587,7 @@ class DDPG(object):
             })
         if self.num_critics == 2:
             actor_grads, actor_loss, critic_grads[0], critic_grads[1], critic_losses[0], critic_losses[1], td_errors[0], \
-                td_errors[1], scalar_summaries = ret
+            td_errors[1], scalar_summaries = ret
         else:
             actor_grads, actor_loss, critic_grads[0], critic_losses[
                 0], td_errors[0], scalar_summaries = ret

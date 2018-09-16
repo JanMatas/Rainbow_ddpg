@@ -11,7 +11,6 @@ import sys
 import os
 from threading import Thread
 
-
 tmp = os.path.dirname(sys.modules['__main__'].__file__) + "/tmp"
 demo_states_dir = tmp + "/demo_states"
 if not os.path.exists(demo_states_dir):
@@ -25,7 +24,7 @@ class Renderer(object):
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)
         self.run_name = run_name
-        if not seed is None:
+        if seed is not None:
             run_name = run_name + str(seed)
         self.fname = '{}-{}-{}.avi'.format(renderer_type, run_name, epoch + 1)
         fourcc = cv2.VideoWriter_fourcc(*"XVID")
@@ -52,20 +51,17 @@ class Renderer(object):
         self.rgb.release()
 
 
-##### Stuff to be done in workers ########
-
-
 class RolloutWorker(object):
     def __init__(self, env_id, agent, num_steps, run_name,
                  reset_to_demo_rate_sched, seed, demo_terminality):
         self.num_steps = num_steps  # Number of steps this workers should execute.
-        self.reset_to_demo_rate_sched = reset_to_demo_rate_sched  #  Schedule to anneal reset to demo.
+        self.reset_to_demo_rate_sched = reset_to_demo_rate_sched  # Schedule to anneal reset to demo.
         self.epoch_rewards = []
         self.epoch_qs = []
         self.run_name = run_name
         self.agent = agent
         self.env_id = env_id
-        self.seed = seed
+        self.seed = seed  # If we have multiple workers, we want to seed them differently.
         self.demo_terminality = demo_terminality
         if seed == 0:
             self.renderer = Renderer("rollout", run_name, 0, seed)
@@ -85,7 +81,6 @@ class RolloutWorker(object):
             obs0, aux0, state0 = env.reset(), env.get_aux(), env.get_state()
             episode_reward = 0
             episodes = 1
-            epoch_episodes = 1
 
             for i in range(self.num_steps):
                 if not self.renderer and np.random.uniform(0, 1) < 0.0005:
@@ -212,9 +207,6 @@ class DistributedTrain(object):
                             compute_Q=True)
                         try:
                             obs, r, done, info = self.eval_env.step(action)
-
-
-#                            self.eval_env.render()
                         except StopIteration:
                             print("interrupted iteration")
                             done = True
@@ -238,7 +230,6 @@ class DistributedTrain(object):
             self.sess = None
             return ret
 
-    #### Functions to be done synchronously ######
     def train(self):
         num_steps = self.nb_epochs * self.nb_epoch_cycles * self.nb_rollout_steps
         rws = []
@@ -281,7 +272,6 @@ class DistributedTrain(object):
                                   np.mean(all_qs) if all_qs else "none")
             for rw in rws:
                 rw.advance_epoch()
-            ### Evaluate #####
             print("Executed epoch cycles, starting the evaluation.")
             eval_obs0, aux0, state0 = self.eval_env.reset(), self.eval_env.get_aux(), self.eval_env.get_state()
             eval_episode_reward = 0.
@@ -321,8 +311,8 @@ class DistributedTrain(object):
 
                     diff_object_conf, diff_grip, diff_target = np.linalg.norm(
                         actual_object_conf - object_conf), np.linalg.norm(
-                            actual_grip -
-                            gripper), np.linalg.norm(actual_target - target)
+                        actual_grip -
+                        gripper), np.linalg.norm(actual_target - target)
                     self.agent.save_aux_prediction(diff_object_conf, diff_grip,
                                                    diff_target)
                 eval_obs0, aux0, state0 = self.eval_env.reset(), self.eval_env.get_aux(), self.eval_env.get_state()
@@ -337,7 +327,7 @@ class DistributedTrain(object):
                 final_evals.append(np.mean(eval_episode_rewards))
             if epoch % 5 == 0 and self.save_folder:
                 path = self.save_folder + "/" + \
-                    self.run_name + "epoch{}.ckpt".format(epoch)
+                       self.run_name + "epoch{}.ckpt".format(epoch)
                 print("Saving model to " + path)
                 self.saver.save(self.sess, path)
 

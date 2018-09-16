@@ -2,9 +2,14 @@ import random
 import math
 from PIL import Image
 import numpy as np
+
 """
-Texture generation using Perlin noise
+Texture generation using Perlin noise. Heavily based on
+https://github.com/nikagra/python-noise/blob/master/noise.py 
+by Mikita Hradovich. 
 """
+
+
 class NoiseUtils:
     def __init__(self, imageSize):
         self.imageSize = imageSize
@@ -123,10 +128,7 @@ class NoiseUtils:
         n = noise(4 * x * frequency, 4 * y * frequency) * 20
         return n - int(n)
 
-    def marble(self, x, y, noise=None):
-        if noise is None:
-            noise = self.perlinNoise
-
+    def marble(self, x, y):
         frequency = 1.0 / self.imageSize
         n = self.fractalBrownianMotion(8 * x, 8 * y, self.perlinNoise)
         return (math.sin(16 * x * frequency + 4 * (n - 0.5)) + 1) * 0.5
