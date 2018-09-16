@@ -13,13 +13,11 @@ from gym.utils import seeding
 
 sys.path.insert(1, "../bullet3/build_cmake/examples/pybullet")
 
-
 def goal_distance(goal_a, goal_b):
     assert goal_a.shape == goal_b.shape
     return np.linalg.norm(goal_a - goal_b, axis=-1)
 
-timeStep = 1/240.0
-
+timeStep = 1 / 240.0
 
 class PhysClientWrapper:
     def __init__(self, other, physicsClientId):
@@ -31,15 +29,24 @@ class PhysClientWrapper:
             attr = getattr(self.other, name)
             if callable(attr):
                 return lambda *args, **kwargs: self._wrap(attr, args, kwargs)
-            return  attr
+            return attr
         raise AttributeError(name)
 
     def _wrap(self, func, args, kwargs):
         kwargs["physicsClientId"] = self.physicsClientId
-        return func( *args, **kwargs)
+        return func(*args, **kwargs)
+
 
 class BulletRobotEnv(gym.GoalEnv):
-    def __init__(self, n_actions, n_substeps, observation_type="low_dim", useDone=False, doneAfter=float("inf"), use_gui=False, action_type="cont", neverDone=False, frameMemoryLen=0):
+    def __init__(self,
+                 n_actions,
+                 n_substeps,
+                 observation_type="low_dim",
+                 useDone=False,
+                 doneAfter=float("inf"),
+                 use_gui=False,
+                 neverDone=False,
+                 frameMemoryLen=0):
         self.viewer = None
         self.n_substeps = n_substeps
         self.metadata = {
@@ -62,42 +69,38 @@ class BulletRobotEnv(gym.GoalEnv):
         if frameMemoryLen:
             self.frameMemory = deque(maxlen=frameMemoryLen)
 
-        self.action_type = action_type
-        self.viewMatrix = p.computeViewMatrix([-1.05,0,0.68],[0.1,0,0],[-0.5,0,1])
-        self.projMatrix = p.computeProjectionMatrixFOV(fov=45,aspect=4./3.,nearVal=0.01,farVal=2.5)
+        self.viewMatrix = p.computeViewMatrix([-1.05, 0, 0.68], [0.1, 0, 0],
+                                              [-0.5, 0, 1])
+        self.projMatrix = p.computeProjectionMatrixFOV(
+            fov=45, aspect=4. / 3., nearVal=0.01, farVal=2.5)
         self.light = {
             "diffuse": 0.4,
             "ambient": 0.5,
             "spec": 0.2,
-            "dir": [10,10, 100],
-            "col":[1,1,1]
+            "dir": [10, 10, 100],
+            "col": [1, 1, 1]
         }
         self._env_setup(initial_qpos=None)
-        if action_type == "cont":
-            self.action_space = spaces.Box(-1, 1, shape=(n_actions,), dtype='float32')
-        elif action_type == "disc":
-            self.action_space = spaces.Discrete(6)
-        else:
-            raise Exception("Unknown action space")
 
-        self.pixels_space = spaces.Box(-np.inf, np.inf, shape=(84,84,3), dtype='float32')
+        self.action_space = spaces.Box(
+            -1, 1, shape=(n_actions, ), dtype='float32')
+
+
+        self.pixels_space = spaces.Box(
+            -np.inf, np.inf, shape=(84, 84, 3), dtype='float32')
         if observation_type == "low_dim":
             self.observation_space = self.low_dim_space
         elif observation_type == "pixels":
             self.observation_space = self.pixels_space
         elif observation_type == "pixels_stacked":
-            self.observation_space = spaces.Box(-np.inf, np.inf, shape=(84,84,12), dtype='float32')
+            self.observation_space = spaces.Box(
+                -np.inf, np.inf, shape=(84, 84, 12), dtype='float32')
         elif observation_type == "pixels_depth":
-            self.observation_space = spaces.Box(-np.inf, np.inf, shape=(84,84), dtype='float32')
-        elif observation_type == "combined":
-            self.observation_space = spaces.Dict(dict(
-                low_dim=low_dim_space,
-                pixels=pixels_space,
-                observation=saces.Box(-np.inf, np.inf, shape=obs['observation'].shape, dtype='float32')
-            ))
+            self.observation_space = spaces.Box(
+                -np.inf, np.inf, shape=(84, 84), dtype='float32')
+
         else:
             raise Exception("Unimplemented observation_type")
-
 
     @property
     def dt(self):
@@ -111,13 +114,9 @@ class BulletRobotEnv(gym.GoalEnv):
         return [seed]
 
     def step(self, action):
-        if self.action_type == "disc":
-            action_index = action // 2
-            action_arr = np.zeros(4)
-            action_arr[action_index] = -1 if action % 2 == 0 else 1
-            action = action_arr
-        elif self.action_type == "cont":
-            action = np.clip(action, self.action_space.low, self.action_space.high)
+
+        action = np.clip(action, self.action_space.low,
+                         self.action_space.high)
         if self.numSteps == 0:
             self.startTime = time.time()
 
@@ -126,17 +125,16 @@ class BulletRobotEnv(gym.GoalEnv):
             self.p.stepSimulation()
         self._step_callback()
         self.numSteps += 1
-        done = False
         current_obs = self._get_obs()
 
-        while self.frameMemoryLen > 0 and len(self.frameMemory) < self.frameMemoryLen:
+        while self.frameMemoryLen > 0 and len(
+                self.frameMemory) < self.frameMemoryLen:
             self.frameMemory.append(current_obs)
             for i in range(self.n_substeps):
                 self.p.stepSimulation()
             current_obs = self._get_obs()
         if self.frameMemoryLen > 0:
             self.frameMemory.append(current_obs)
-
 
         info = {}
         done = False
@@ -146,7 +144,7 @@ class BulletRobotEnv(gym.GoalEnv):
 
             done = self._is_success(reward) or self.numSteps > self.doneAfter
             if done:
-                info = {"episode": {"l":self.numSteps, "r":reward}}
+                info = {"episode": {"l": self.numSteps, "r": reward}}
             if done and self.neverDone:
                 self.goal = self._sample_goal()
                 self.draw_goal()
@@ -155,21 +153,19 @@ class BulletRobotEnv(gym.GoalEnv):
 
         if self.frameMemoryLen > 0:
 
-                return np.concatenate(self.frameMemory, 2), reward, done, info
+            return np.concatenate(self.frameMemory, 2), reward, done, info
         else:
-                return current_obs, reward, done, info
-
-
-
+            return current_obs, reward, done, info
 
     def reset_to_state(self, state, fn=None):
         self.numSteps = 0
         if not self._reset_sim(state=state, stateFile=fn):
             self.reset()
         self.p.setTimeStep(timeStep)
-        self.p.setGravity(0,0,-10)
+        self.p.setGravity(0, 0, -10)
         current_obs = self._get_obs()
-        while self.frameMemoryLen > 0 and len(self.frameMemory) < self.frameMemoryLen:
+        while self.frameMemoryLen > 0 and len(
+                self.frameMemory) < self.frameMemoryLen:
             self.frameMemory.append(current_obs)
             for i in range(self.n_substeps):
                 self.p.stepSimulation()
@@ -177,9 +173,9 @@ class BulletRobotEnv(gym.GoalEnv):
         if self.frameMemoryLen > 0:
             self.frameMemory.append(current_obs)
         if self.frameMemoryLen > 0:
-                return np.concatenate(self.frameMemory, 2)
+            return np.concatenate(self.frameMemory, 2)
         else:
-                return current_obs
+            return current_obs
 
     def reset(self):
         self.numSteps = 0
@@ -187,9 +183,10 @@ class BulletRobotEnv(gym.GoalEnv):
         while not did_reset_sim:
             did_reset_sim = self._reset_sim()
         self.p.setTimeStep(timeStep)
-        self.p.setGravity(0,0,-10)
+        self.p.setGravity(0, 0, -10)
         current_obs = self._get_obs()
-        while self.frameMemoryLen > 0 and len(self.frameMemory) < self.frameMemoryLen:
+        while self.frameMemoryLen > 0 and len(
+                self.frameMemory) < self.frameMemoryLen:
             self.frameMemory.append(current_obs)
             for i in range(self.n_substeps):
                 self.p.stepSimulation()
@@ -198,51 +195,56 @@ class BulletRobotEnv(gym.GoalEnv):
             self.frameMemory.append(current_obs)
         if self.frameMemoryLen > 0:
 
-                return np.concatenate(self.frameMemory, 2)
+            return np.concatenate(self.frameMemory, 2)
         else:
-                return current_obs
-
+            return current_obs
 
     def close(self):
         pass
 
     def render(self, mode='human'):
         width, height = 106, 84
-        img = self.p.getCameraImage(width,height,self.viewMatrix,self.projMatrix, shadow=1, lightAmbientCoeff=self.light["ambient"], lightDiffuseCoeff=self.light["diffuse"], lightSpecularCoeff=self.light["spec"], lightDirection=self.light["dir"], lightColor=self.light["col"])
+        img = self.p.getCameraImage(
+            width,
+            height,
+            self.viewMatrix,
+            self.projMatrix,
+            shadow=1,
+            lightAmbientCoeff=self.light["ambient"],
+            lightDiffuseCoeff=self.light["diffuse"],
+            lightSpecularCoeff=self.light["spec"],
+            lightDirection=self.light["dir"],
+            lightColor=self.light["col"])
         # img = self.p.getCameraImage(width,height)
         # img = self.p.getCameraImage(width,height)
-        rgb =  np.array(img[2], dtype=np.float).reshape(height,width,4) / 255
+        rgb = np.array(img[2], dtype=np.float).reshape(height, width, 4) / 255
 
-        rgb[:,:,3],rgb[:,:,2] = rgb[:,:,2],rgb[:,:,0]
-        rgb[:,:,0] = rgb[:,:,3]
-        rgb = rgb[:,11:-11,:]
-
+        rgb[:, :, 3], rgb[:, :, 2] = rgb[:, :, 2], rgb[:, :, 0]
+        rgb[:, :, 0] = rgb[:, :, 3]
+        rgb = rgb[:, 11:-11, :]
 
         # d = np.array(img[3], dtype=np.float).reshape(width,height) /3
-        # d = d 
+        # d = d
         # d -= d.min()
         # d *= 1/d.max()
         if mode == 'rgb_array':
 
-            #rgb[:,:,3] = d # No depth
-            
-            return rgb[:,:,0:3]
-        elif mode == 'human':
-            cv2.imshow("test", rgb[:,:,0:3])
-            cv2.waitKey(1)
+            # rgb[:,:,3] = d # No depth
 
+            return rgb[:, :, 0:3]
+        elif mode == 'human':
+            cv2.imshow("test", rgb[:, :, 0:3])
+            cv2.waitKey(1)
 
     def _get_viewer(self):
         raise NotImplementedError()
 
-
-
-    def renderDebugText(self, text, position, textColorRGB=(1,1,1)):
+    def renderDebugText(self, text, position, textColorRGB=(1, 1, 1)):
 
         self.p.addUserDebugText(text, position, textColorRGB=textColorRGB)
+
     def clearDebugText(self):
         self.p.removeAllUserDebugItems()
-
 
     # GoalEnv methods
     # ----------------------------
@@ -255,10 +257,9 @@ class BulletRobotEnv(gym.GoalEnv):
         else:
             return -d
 
-
-
     def timePerStep(self):
         return (time.time() - self.startTime) / self.numSteps
+
     # Extension methods
     # ----------------------------
 
@@ -308,13 +309,11 @@ class BulletRobotEnv(gym.GoalEnv):
         """
         pass
 
-
     def _render_cleanup(self):
         """A custom callback that is called before rendering. Can be used
         to implement custom visualizations.
         """
         pass
-
 
     def _step_callback(self):
         """A custom callback that is called after stepping the simulation. Can be used

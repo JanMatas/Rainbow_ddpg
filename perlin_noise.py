@@ -1,12 +1,11 @@
-
-import random, math
+import random
+import math
 from PIL import Image
 import numpy as np
 """
 Texture generation using Perlin noise
 """
 class NoiseUtils:
-    
     def __init__(self, imageSize):
         self.imageSize = imageSize
         self.gradientNumber = 256
@@ -43,7 +42,9 @@ class NoiseUtils:
                 self.permutations[j], self.permutations[i]
 
     def getGradientIndex(self, x, y):
-        return self.permutations[(x + self.permutations[y % self.gradientNumber]) % self.gradientNumber]
+        return self.permutations[
+            (x + self.permutations[y % self.gradientNumber]) %
+            self.gradientNumber]
 
     def perlinNoise(self, x, y):
         qx0 = int(math.floor(x))
@@ -75,7 +76,7 @@ class NoiseUtils:
         wy = ty0 * ty0 * (3 - 2 * ty0)
         return (v0 + wy * (v1 - v0)) * 0.5 + 1
 
-    def makeTexture(self, texture = None):
+    def makeTexture(self, texture=None):
         if texture is None:
             texture = self.cloud
 
@@ -85,7 +86,7 @@ class NoiseUtils:
             for j in range(self.imageSize):
                 value = texture(i, j)
                 noise[i, j] = value
-                
+
                 if max is None or max < value:
                     max = value
 
@@ -108,13 +109,13 @@ class NoiseUtils:
             amplitude *= persistence
         return value
 
-    def cloud(self, x, y, func = None):
+    def cloud(self, x, y, func=None):
         if func is None:
             func = self.perlinNoise
 
         return self.fractalBrownianMotion(8 * x, 8 * y, func)
 
-    def wood(self, x, y, noise = None):
+    def wood(self, x, y, noise=None):
         if noise is None:
             noise = self.perlinNoise
 
@@ -122,7 +123,7 @@ class NoiseUtils:
         n = noise(4 * x * frequency, 4 * y * frequency) * 20
         return n - int(n)
 
-    def marble(self, x, y, noise = None):
+    def marble(self, x, y, noise=None):
         if noise is None:
             noise = self.perlinNoise
 
@@ -130,30 +131,33 @@ class NoiseUtils:
         n = self.fractalBrownianMotion(8 * x, 8 * y, self.perlinNoise)
         return (math.sin(16 * x * frequency + 4 * (n - 0.5)) + 1) * 0.5
 
+
 def createPalette(minBase, maxBase):
     diff = np.array(maxBase) - minBase
     delta = diff / 256
     return np.array([minBase + delta * i for i in range(256)]).flatten()
 
 
-def createAndSave(fn, mode="wood", baseColor=(128,128,128)):
+def createAndSave(fn, mode="wood", baseColor=(128, 128, 128)):
     imageSize = 100
-    
+
     noise = NoiseUtils(imageSize)
     noises = {"wood": noise.wood, "cloud": noise.cloud, "marble": noise.marble}
-    noise.makeTexture(texture = noises[mode])
+    noise.makeTexture(texture=noises[mode])
 
     img = Image.new("L", (imageSize, imageSize))
-    diff = np.array([10]*3)
-    pallete = createPalette(np.clip(baseColor - diff, 0, 255), np.clip(baseColor + diff, 0, 255))
+    diff = np.array([10] * 3)
+    pallete = createPalette(
+        np.clip(baseColor - diff, 0, 255), np.clip(baseColor + diff, 0, 255))
     img.putpalette(pallete.astype(int).tolist())
     pixels = img.load()
     for i in range(0, imageSize):
-       for j in range(0, imageSize):
+        for j in range(0, imageSize):
             c = noise.img[i, j]
             pixels[i, j] = c
     img.save(fn)
     return fn
 
+
 if __name__ == "__main__":
-    createAndSave("temp.png", baseColor=[255,255,255])
+    createAndSave("temp.png", baseColor=[255, 255, 255])
