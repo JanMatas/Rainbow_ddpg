@@ -1,6 +1,5 @@
-import os
 from rainbow_ddpg.ddpg import DDPG
-import baselines.common.tf_util as U
+import baselines.common.tf_util as tfutil
 import itertools
 from baselines import logger
 import numpy as np
@@ -9,25 +8,26 @@ import cv2
 import gym
 from baselines.common.schedules import LinearSchedule
 import sys
-
-tmp = os.path.dirname(sys.modules['__main__'].__file__) + "/tmp"
-demo_states_dir = tmp + "/demo_states"
 import os
-if not os.path.exists(demo_states_dir):
-    os.makedirs(demo_states_dir)
-demo_states_template = demo_states_dir + "/{}/{}.bullet"
 from threading import Thread
 
 
+tmp = os.path.dirname(sys.modules['__main__'].__file__) + "/tmp"
+demo_states_dir = tmp + "/demo_states"
+if not os.path.exists(demo_states_dir):
+    os.makedirs(demo_states_dir)
+demo_states_template = demo_states_dir + "/{}/{}.bullet"
+
+
 class Renderer(object):
-    def __init__(self, type, run_name, epoch, seed=None):
+    def __init__(self, renderer_type, run_name, epoch, seed=None):
         self.directory = tmp + '/ddpg_video_buffer/'
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)
         self.run_name = run_name
         if not seed is None:
             run_name = run_name + str(seed)
-        self.fname = '{}-{}-{}.avi'.format(type, run_name, epoch + 1)
+        self.fname = '{}-{}-{}.avi'.format(renderer_type, run_name, epoch + 1)
         fourcc = cv2.VideoWriter_fourcc(*"XVID")
         self.rgb = cv2.VideoWriter(self.directory + self.fname, fourcc, 30.0,
                                    (84, 84))
@@ -60,7 +60,7 @@ class RolloutWorker(object):
                  reset_to_demo_rate_sched, seed, demo_terminality):
         self.num_steps = num_steps  # Number of steps this workers should execute.
         self.reset_to_demo_rate_sched = reset_to_demo_rate_sched  #  Schedule to anneal reset to demo.
-        self.epoch_rewards = []  # Initialize empty storage for re
+        self.epoch_rewards = []
         self.epoch_qs = []
         self.run_name = run_name
         self.agent = agent
@@ -134,7 +134,7 @@ class RolloutWorker(object):
                             if not terminal_demo:
                                 break
                         fn = demo_states_template.format(
-                            self.run_name, memory.storage[demo_index][11])
+                            self.run_name, memory.storage[demo_index][9])
                         obs0 = env.reset_to_state(state, fn=fn)
                     else:
                         obs0 = env.reset()
@@ -182,7 +182,7 @@ class DistributedTrain(object):
         self.env_id = env_id
 
     def start(self):
-        with U.single_threaded_session() as sess:
+        with tfutil.single_threaded_session() as sess:
             self.sess = sess
             self.agent.set_sess(sess)
             if self.load_file:
@@ -218,6 +218,7 @@ class DistributedTrain(object):
                         except StopIteration:
                             print("interrupted iteration")
                             done = True
+
                         if done and r > 0:
                             print("success")
                             successes += 1
@@ -246,7 +247,7 @@ class DistributedTrain(object):
             rw = RolloutWorker(
                 self.env_id, self.agent, num_steps, self.run_name,
                 LinearSchedule(
-                    2e5, initial_p=self.reset_to_demo_rate, final_p=0.1), i,
+                    200000, initial_p=self.reset_to_demo_rate, final_p=0.1), i,
                 self.demo_terminality)
             thread = Thread(target=rw.exec_rollouts, daemon=True)
             thread.start()
@@ -262,7 +263,7 @@ class DistributedTrain(object):
                     end="\r")
                 self.agent.memory.grow_limit()
                 for t_train in range(self.nb_train_steps):
-                    cl, al = self.agent.train(iteration)
+                    self.agent.train(iteration)
                     iteration += 1
                     if iteration % self.policy_and_target_update_period == 0:
                         self.agent.update_target_net()
@@ -338,7 +339,7 @@ class DistributedTrain(object):
                 path = self.save_folder + "/" + \
                     self.run_name + "epoch{}.ckpt".format(epoch)
                 print("Saving model to " + path)
-                save_path = self.saver.save(self.sess, path)
+                self.saver.save(self.sess, path)
 
             logger.record_tabular(
                 "eval_rewards",
@@ -356,7 +357,7 @@ class DistributedTrain(object):
             print(
                 "Pretrain: {}/{}".format(iteration, self.num_pretrain_steps),
                 end="\r")
-            cl, al = self.agent.train(iteration, pretrain=True)
+            self.agent.train(iteration, pretrain=True)
             iteration += 1
             if iteration % self.policy_and_target_update_period == 0:
                 self.agent.update_target_net()

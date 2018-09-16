@@ -13,7 +13,6 @@ import sys
 
 tmp = os.path.dirname(sys.modules['__main__'].__file__) + "/tmp"
 
-
 def normalize(x, stats):
     if stats is None:
         return x
@@ -129,7 +128,7 @@ class DDPG(object):
         self.pretraining_tf = tf.placeholder(
             tf.float32, shape=(None, 1),
             name='pretraining_tf')  # whether we use pre training or not
-        # Parameters.
+
         self.aux_shape = aux_shape
         self.gamma = gamma
         self.tau = tau
@@ -584,7 +583,6 @@ class DDPG(object):
             self.actor_grads, self.actor_loss, *self.critic_grads,
             *self.critic_losses, *self.td_errors, self.scalar_summaries
         ]
-
         ret = self.sess.run(
             ops,
             feed_dict={
