@@ -293,7 +293,7 @@ class DDPG(object):
             self.action_diffs = tf.reduce_mean(
                 tf.square(self.actions - self.actor_tf), 1)
             demo_better_than_actor = self.critic_tfs[
-                                         0] < self.critic_with_actor_tfs[0]
+                                         0] > self.critic_with_actor_tfs[0]
             demo_better_than_actor = self.pretraining_tf * \
                                      tf.cast(demo_better_than_actor, tf.float32)
             self.bc_loss = (
