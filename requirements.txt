@@ -1,6 +1,6 @@
 tensorflow==1.8.0
 baselines==0.1.5
-numpy==1.14.3
+numpy==1.22.0
 pybullet==1.9.7
 mpi4py==3.0.0
 opencv_python==3.4.2.16
